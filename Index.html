@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mythic AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body {
+      background-color: #0b0914;
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .mythic-gradient {
+      background: linear-gradient(135deg, #a855f7 0%, #6366f1 50%, #ec4899 100%);
+    }
+    .mythic-border {
+      border: 1px solid rgba(168, 85, 247, 0.25);
+    }
+    .prose pre {
+      background-color: #161224;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      border: 1px solid rgba(255,255,255,0.1);
+      margin-top: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .prose code {
+      color: #e879f9;
+      font-size: 0.9em;
+    }
+    .prose p { margin-bottom: 0.5rem; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+    .prose ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body class="h-screen flex flex-col justify-between overflow-hidden">
+
+  <!-- Top Navigation Bar -->
+  <header class="px-6 py-4 bg-[#110e20]/80 backdrop-blur-md mythic-border border-t-0 border-x-0 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl mythic-gradient flex items-center justify-center shadow-lg shadow-purple-500/30">
+        <span class="text-white font-bold text-lg">✦</span>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-wide text-white flex items-center gap-2">
+          Mythic AI
+          <span id="providerBadge" class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-700/50">Auto</span>
+        </h1>
+      </div>
+    </div>
+
+    <div class="flex items-center space-x-3">
+      <select id="providerSelect" class="bg-[#1a152e] text-xs text-slate-300 px-3 py-2 rounded-lg border border-purple-500/30 focus:outline-none focus:border-purple-400">
+        <option value="auto">Engine: Auto-Detect</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="claude">Anthropic Claude</option>
+      </select>
+      <button onclick="clearChat()" class="text-xs text-slate-400 hover:text-white px-3 py-2 rounded-lg bg-[#1a152e] hover:bg-purple-900/40 transition">
+        New Chat
+      </button>
+    </div>
+  </header>
+
+  <!-- Chat Messages Container -->
+  <main id="chatContainer" class="flex-1 overflow-y-auto p-6 space-y-6 max-w-4xl w-full mx-auto">
+    <!-- Welcome Message -->
+    <div class="flex items-start space-x-4">
+      <div class="w-8 h-8 rounded-lg mythic-gradient flex-shrink-0 flex items-center justify-center text-white text-sm font-bold">✦</div>
+      <div class="bg-[#161226] mythic-border rounded-2xl rounded-tl-none px-5 py-4 text-slate-200 max-w-2xl shadow-md">
+        <p class="font-medium text-purple-300 mb-1">Welcome to Mythic AI.</p>
+        <p class="text-sm text-slate-300">Ask me to write code, brainstorm architecture, analyze data, or tackle complex questions. How can I help you today?</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Input Area -->
+  <footer class="p-4 bg-[#0b0914] max-w-4xl w-full mx-auto">
+    <form id="chatForm" onsubmit="sendMessage(event)" class="relative flex items-center">
+      <textarea
+        id="userInput"
+        rows="1"
+        placeholder="Ask Mythic AI anything... (Shift+Enter for new line)"
+        class="w-full bg-[#161226] text-white placeholder-slate-500 rounded-2xl pl-5 pr-14 py-4 focus:outline-none focus:ring-2 focus:ring-purple-500/60 mythic-border resize-none text-sm"
+        onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(event); }"
+      ></textarea>
+      <button
+        type="submit"
+        id="sendBtn"
+        class="absolute right-3 p-2.5 rounded-xl mythic-gradient text-white hover:opacity-90 transition shadow-md shadow-purple-500/20 disabled:opacity-40"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </button>
+    </form>
+  </footer>
+
+  <script>
+    let conversationHistory = [];
+    const chatContainer = document.getElementById("chatContainer");
+    const userInput = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const providerSelect = document.getElementById("providerSelect");
+    const providerBadge = document.getElementById("providerBadge");
+
+    function appendMessage(role, content) {
+      const wrapper = document.createElement("div");
+      wrapper.className = role === "user" ? "flex justify-end" : "flex items-start space-x-4";
+
+      if (role === "user") {
+        wrapper.innerHTML = `
+          <div class="bg-purple-600/90 text-white rounded-2xl rounded-tr-none px-5 py-3.5 max-w-xl text-sm shadow-md whitespace-pre-wrap">${escapeHtml(content)}</div>
+        `;
+      } else {
+        const renderedMarkdown = marked.parse(content);
+        wrapper.innerHTML = `
+          <div class="w-8 h-8 rounded-lg mythic-gradient flex-shrink-0 flex items-center justify-center text-white text-sm font-bold">✦</div>
+          <div class="bg-[#161226] mythic-border rounded-2xl rounded-tl-none px-5 py-4 text-slate-200 max-w-2xl text-sm shadow-md prose">${renderedMarkdown}</div>
+        `;
+      }
+
+      chatContainer.appendChild(wrapper);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function appendLoading() {
+      const loader = document.createElement("div");
+      loader.id = "loadingIndicator";
+      loader.className = "flex items-start space-x-4";
+      loader.innerHTML = `
+        <div class="w-8 h-8 rounded-lg mythic-gradient flex-shrink-0 flex items-center justify-center text-white text-sm font-bold animate-pulse">✦</div>
+        <div class="bg-[#161226] mythic-border rounded-2xl rounded-tl-none px-5 py-4 text-slate-400 text-sm">
+          Mythic is thinking...
+        </div>
+      `;
+      chatContainer.appendChild(loader);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function removeLoading() {
+      const loader = document.getElementById("loadingIndicator");
+      if (loader) loader.remove();
+    }
+
+    async function sendMessage(e) {
+      e.preventDefault();
+      const text = userInput.value.trim();
+      if (!text) return;
+
+      userInput.value = "";
+      appendMessage("user", text);
+      conversationHistory.push({ role: "user", content: text });
+
+      sendBtn.disabled = true;
+      appendLoading();
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: conversationHistory,
+            provider: providerSelect.value
+          })
+        });
+
+        const data = await res.json();
+        removeLoading();
+
+        if (!res.ok) {
+          appendMessage("assistant", `⚠️ **Error:** ${data.detail || "Something went wrong."}`);
+        } else {
+          appendMessage("assistant", data.reply);
+          conversationHistory.push({ role: "assistant", content: data.reply });
+          if (data.provider_used) {
+            providerBadge.textContent = data.provider_used;
+          }
+        }
+      } catch (err) {
+        removeLoading();
+        appendMessage("assistant", `⚠️ **Network Error:** Could not reach the Mythic AI server.`);
+      } finally {
+        sendBtn.disabled = false;
+        userInput.focus();
+      }
+    }
+
+    function clearChat() {
+      conversationHistory = [];
+      chatContainer.innerHTML = "";
+      appendMessage("assistant", "Memory cleared. Ready for a fresh start—what are we working on?");
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag]));
+    }
+  </script>
+</body>
+</html>
